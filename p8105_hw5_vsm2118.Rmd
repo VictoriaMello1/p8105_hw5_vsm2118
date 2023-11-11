@@ -1,0 +1,71 @@
+---
+title: "HW 5 Data Science"
+author: "Victoria Mello (vsm2118)"
+date: "November 13, 2023"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(rvest)
+library(patchwork)
+
+library(p8105.datasets)
+
+knitr::opts_chunk$set(
+	echo = TRUE,
+	warning = FALSE,
+	fig.width = 8, 
+  fig.height = 6,
+  out.width = "90%"
+)
+
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+```
+
+## Problem 1
+
+```{r}
+
+```
+
+
+## Problem 2
+```{r}
+ # Step 1: Get all file names
+file_names <- list.files(path = "./data", pattern = ".csv", full.names = TRUE)
+
+# Step 2: Use purrr::map to read in data for each subject
+data_list <- map(file_names, ~read_csv(.x) %>%
+                   mutate(subject_id = gsub("[^0-9]", "", .x),
+                          arm = ifelse(grepl("con", .x), "control", "experimental")))
+
+# Step 3: Tidy the data
+tidy_data <- bind_rows(data_list) %>%
+  gather(key = "week", value = "observation", -subject_id, -arm) %>%
+  mutate(week = as.numeric(gsub("week_", "", week)))
+
+view(tidy_data)
+
+# Step 4: Create a spaghetti plot
+spaghetti_plot <- ggplot(tidy_data, aes(x = week, y = observation, color = factor(subject_id), group = interaction(subject_id, arm))) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~arm, scales = "free_y") + 
+  labs(title = "Spaghetti Plot of Observation Values of Subjects in Control vs Experimental Study Arms Over 8 Weeks",
+       x = "Week",
+       y = "Observation Value",
+       color = "Subject ID") +
+  theme_minimal()
+
+print(spaghetti_plot)
+```
+
