@@ -10,8 +10,6 @@ library(tidyverse)
 library(rvest)
 library(patchwork)
 
-library(p8105.datasets)
-
 knitr::opts_chunk$set(
 	echo = TRUE,
 	warning = FALSE,
@@ -31,6 +29,7 @@ scale_colour_discrete = scale_colour_viridis_d
 scale_fill_discrete = scale_fill_viridis_d
 ```
 
+
 ## Problem 1
 
 ```{r}
@@ -39,6 +38,7 @@ scale_fill_discrete = scale_fill_viridis_d
 
 
 ## Problem 2
+
 ```{r}
  # Step 1: Get all file names
 file_names <- list.files(path = "./data", pattern = ".csv", full.names = TRUE)
@@ -49,14 +49,14 @@ data_list <- map(file_names, ~read_csv(.x) %>%
                           arm = ifelse(grepl("con", .x), "control", "experimental")))
 
 # Step 3: Tidy the data
-tidy_data <- bind_rows(data_list) %>%
-  gather(key = "week", value = "observation", -subject_id, -arm) %>%
-  mutate(week = as.numeric(gsub("week_", "", week)))
+tidy_data <- bind_rows(data_list) %>% 
+  pivot_longer(cols = starts_with("week_"), names_to = "week", values_to = "observation") %>% 
+  mutate(week = as.numeric(str_remove(week, "week_")))
 
 view(tidy_data)
 
 # Step 4: Create a spaghetti plot
-spaghetti_plot <- ggplot(tidy_data, aes(x = week, y = observation, color = factor(subject_id), group = interaction(subject_id, arm))) +
+study_plot <- ggplot(tidy_data, aes(x = week, y = observation, color = factor(subject_id), group = interaction(subject_id, arm))) +
   geom_line() +
   geom_point() +
   facet_wrap(~arm, scales = "free_y") + 
@@ -66,6 +66,13 @@ spaghetti_plot <- ggplot(tidy_data, aes(x = week, y = observation, color = facto
        color = "Subject ID") +
   theme_minimal()
 
-print(spaghetti_plot)
+print(study_plot)
+```
+
+
+## Problem 3
+
+```{r}
+
 ```
 
