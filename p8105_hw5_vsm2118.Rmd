@@ -116,8 +116,12 @@ data_list <- map(file_names, ~read_csv(.x) %>%
 
 # Step 3: Tidy the data
 tidy_data <- bind_rows(data_list) %>% 
+  filter(!is.na(subject_id) & subject_id != "") %>%
   pivot_longer(cols = starts_with("week_"), names_to = "week", values_to = "observation") %>%
   mutate(week = as.numeric(str_remove(week, "week_")))
+
+print(unique(tidy_data$subject_id))
+
 
 # Step 4: Create a spaghetti plot
 study_plot <- ggplot(tidy_data, aes(x = week, y = observation, color = factor(subject_id), group = interaction(subject_id, arm))) +
