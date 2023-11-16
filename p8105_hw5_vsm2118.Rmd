@@ -105,11 +105,11 @@ This figure suggests a very wide range in the rate at which homicides are solved
 
 ## Problem 2
 
-```{r}
+```{r message=FALSE}
  # Step 1: Get all file names
 file_names <- list.files(path = "./data", pattern = ".csv", full.names = TRUE)
 
-# Step 2: Use purrr::map to read in data for each subject
+# Step 2: Use map to read in data for each subject
 data_list <- map(file_names, ~read_csv(.x) %>%
                    mutate(subject_id = gsub("[^0-9]", "", .x),
                           arm = ifelse(grepl("con", .x), "control", "experimental")))
@@ -119,9 +119,6 @@ tidy_data <- bind_rows(data_list) %>%
   filter(!is.na(subject_id) & subject_id != "") %>%
   pivot_longer(cols = starts_with("week_"), names_to = "week", values_to = "observation") %>%
   mutate(week = as.numeric(str_remove(week, "week_")))
-
-print(unique(tidy_data$subject_id))
-
 
 # Step 4: Create a spaghetti plot
 study_plot <- ggplot(tidy_data, aes(x = week, y = observation, color = factor(subject_id), group = interaction(subject_id, arm))) +
@@ -142,39 +139,31 @@ The control group consistently maintains observation values within the range of 
 
 ## Problem 3
 
-
 ```{r}
-# Set seed for reproducibility
-set.seed(12345)
-
 # Function to simulate one-sample t-test and return estimate and p-value
-sim_t_test <- function(true_mean = 0, true_sd = 5, n_obs = 30) {
-  x <- rnorm(n = n_obs, mean = true_mean, sd = true_sd)
-  t_test_result <- broom::tidy(t.test(x))
+sim_t_test <- function(true_mean = c(0, 1, 2, 3, 4, 5, 6), true_sd = 5, n_obs = 30, num_datasets = 5000) {
+  results <- map_df(true_mean, function(mu) {
+    dataframes <- replicate(num_datasets, rnorm(n_obs, mean = mu, sd = true_sd), simplify = FALSE)
   
-  tibble(
-    true_mean = true_mean,
-    estimate_mean = t_test_result$estimate,
-    p_value = t_test_result$p.value
-  )
+    map_df(dataframes, function(dataset) {
+      t_test_result <- t.test(dataset, mu = mu)
+      tidy_result <- broom::tidy(t_test_result)
+      data.frame(true_mean = mu, estimate_mean = tidy_result$estimate, p_value = tidy_result$p.value)
+    })
+  })
+  return(results)
 }
 
-# Use map to simulate the t-test for different true values of μ
-sim_results <- expand_grid(
-  true_mean = c(0, 1, 2, 3, 4, 5, 6),
-  iter = 1:5000
-) %>% 
-  mutate(t_test_results = map2(true_mean, iter, sim_t_test)) 
-
+# Example usage
+sim_results <- sim_t_test()
 ```
 
 
 Plot 1: Power vs. True Value of μ
 ```{r}
 power_plot_data <- sim_results %>%
-  mutate(power = map_dbl(t_test_results, ~ mean(.x$p_value < 0.05))) %>%
   group_by(true_mean) %>%
-  summarize(power = mean(power))
+  summarize(power = mean(p_value < 0.05))
 
 ggplot(power_plot_data, aes(x = true_mean, y = power)) +
   geom_line() +
@@ -185,38 +174,37 @@ ggplot(power_plot_data, aes(x = true_mean, y = power)) +
 
 ```
 
-There appears to be a complex, non-linear relationship between effect size (true value of μ) and power. The initial increase from 0 to 1 and subsequent fluctuations might suggest varying sensitivity of the test to different effect sizes. Furthermore, the sharp changes at specific values of μ could be indicative of thresholds or critical points where the test's ability to detect the effect size changes.
+There appears to be a non-linear relationship between effect size (true value of μ) and power. The fluctuations shown by the plot suggest varying sensitivity of the test to different effect sizes. Furthermore, the sharp changes at specific values of μ could be indicative of thresholds or critical points where the test's ability to detect the effect size changes. Whenever we execute the simulation with the generated data, the resulting graph exhibits variation, displaying a non-linear relationship on each iteration.
+
 
 
 Plot 2: Average Estimate of μ̂ vs. True Value of μ
 ```{r}
 estimate_plot_data <- sim_results %>%
-  mutate(avg_estimate = map_dbl(t_test_results, ~ mean(.x$estimate_mean))) %>%
   group_by(true_mean) %>%
-  summarize(avg_estimate = mean(avg_estimate))
+  summarize(avg_estimate = mean(estimate_mean))
 
-estimate_plot_data
-ggplot(estimate_plot_data, aes(x = true_mean, y = avg_estimate)) +
+estimate_plot =
+  estimate_plot_data %>% 
+ggplot(aes(x = true_mean, y = avg_estimate)) +
   geom_line() +
   geom_point() + 
   labs(title = "Average Estimate of μ̂ vs. True Value of μ",
        x = "True Value of μ",
        y = "Average Estimate of μ̂")
 
+print(estimate_plot)
 ```
+
+A strong positive linear relationship exists between the actual mean values and the mean estimates derived from the simulation. This correlation is logical, as increasing the sample size leads to average estimated means closely resembling the true mean value.
 
 
 Plot 3: Average Estimate of μ̂ in Rejected Samples vs. True Value of μ
 ```{r}
 rejected_estimate_plot_data <- sim_results %>%
-  mutate(
-    avg_estimate_rejected = map_dbl(
-      t_test_results,
-      ~ ifelse(mean(.x$p_value < 0.05) > 0, mean(.x$estimate_mean), NA)
-    )
-  ) %>%
+  filter(p_value <0.05) %>% 
   group_by(true_mean) %>%
-  summarize(avg_estimate_rejected = mean(avg_estimate_rejected, na.rm = TRUE))
+  summarize(avg_estimate_rejected = mean(estimate_mean))
 
 combined_data <- left_join(estimate_plot_data, rejected_estimate_plot_data, by = "true_mean")
 
@@ -234,4 +222,5 @@ ggplot(combined_data, aes(x = true_mean)) +
   theme(legend.position = "top")  
 ```
 
-The sample average of μ̂ across tests for which the null hypothesis is rejected does not appear to be approximately equal to the true value of μ. The average estimate of μ̂ for all samples tends to hover around a relatively smaller range near zero, indicating unbiased behavior of the estimator. However, the wider range observed in rejected samples suggests increased variability, potentially influenced by factors such as data variability and the sensitivity of the test. Notably, the crossing points between the lines representing all samples and rejected samples indicate that, for specific true values of μ, the estimation process remains unbiased even when the null hypothesis is rejected. The variability observed in rejected samples may be attributed to factors associated with the rejection of the null hypothesis, emphasizing this nuanced relationship between effect size, estimation, and hypothesis testing.
+The mean value of μ̂ across tests where the null hypothesis is rejected is approximatley equal to the true value of μ, with the average estimates of μ̂ more accurately approaching the true μ values as more samples are generated/run. The slight variations observed in the graph arise from the inherent random sampling variability present in the results.
+
